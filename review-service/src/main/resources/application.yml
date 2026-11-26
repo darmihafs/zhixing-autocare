@@ -1,0 +1,88 @@
+# =====================================================================
+# 评价服务 review-service：评价、商家回复、点赞数异步同步
+# 端口 8086；库 hc_review；Redis db6；RocketMQ 消费（点赞事件）
+# =====================================================================
+server:
+  port: 8086
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+# Sentinel 的 Feign 适配由 spring-cloud-starter-alibaba-sentinel 提供，
+# 其 @ConditionalOnProperty 只认 feign.sentinel.enabled（无 spring.cloud 前缀），
+# 放在 spring.cloud.openfeign 下不会生效，FallbackFactory 不会被织入。
+feign:
+  sentinel:
+    enabled: true
+
+spring:
+  application:
+    name: review-service
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 25MB
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3307}/hc_review?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USERNAME:root}
+    password: "${MYSQL_PASSWORD:123456}"
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 10
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 6
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  producer:
+    group: ${spring.application.name}-producer-group
+    send-message-timeout: 3000
+
+hc:
+  # 评价晒图本地存储目录（生产建议通过 HC_UPLOAD_REVIEW_DIR 指定持久化绝对路径；对外经 /api/review/uploads/** 访问）
+  upload:
+    review-dir: ${HC_UPLOAD_REVIEW_DIR:./uploads/review}
+  # 服务间内部凭证（调用 order-service /internal/** 使用；网关不路由该前缀）
+  internal:
+    token: ${INTERNAL_TOKEN:hc-internal-2026-dev-token}
+
+logging:
+  level:
+    com.hongcheng: info

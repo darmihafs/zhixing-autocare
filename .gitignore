@@ -1,0 +1,45 @@
+# ---- Maven ----
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+.flattened-pom.xml
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+release.properties
+
+# ---- IDE ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# ---- 前端（后续步骤创建） ----
+node_modules/
+dist/
+*.local
+
+# ---- 日志与临时文件 ----
+logs/
+*.log
+*.tmp
+.DS_Store
+Thumbs.db
+.chrome-*/
+.qa-*/
+
+# ---- 运行时产物与敏感数据 ----
+.env
+!.env.example
+.env.local
+.env.*.local
+uploads/
+perf/results/
+vibe_images/
+scripts/*.sql

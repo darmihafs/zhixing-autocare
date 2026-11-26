@@ -1,0 +1,87 @@
+# =====================================================================
+# 门店服务 shop-service：门店/服务项目、ES(IK) 搜索、Redis 缓存
+# 端口 8083；库 hc_shop；Redis db3；Elasticsearch 8.10.4
+# =====================================================================
+server:
+  port: 8083
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+spring:
+  application:
+    name: shop-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3307}/hc_shop?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USERNAME:root}
+    password: "${MYSQL_PASSWORD:123456}"
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 10
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 3
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+  elasticsearch:
+    uris: ${ES_URIS:http://127.0.0.1:9200}
+    connection-timeout: 3s
+    socket-timeout: 10s
+
+# RocketMQ：门店/服务变更 -> HC_SHOP_SYNC -> 本服务消费者更新 ES 索引
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  producer:
+    group: ${spring.application.name}-producer-group
+    send-message-timeout: 3000
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com.hongcheng: info
+
+# /internal/** 内部接口凭证（与 product-service 一致；网关不路由该前缀）
+hc:
+  internal:
+    token: ${INTERNAL_TOKEN:hc-internal-2026-dev-token}
+  # 直连库压测对照开关（默认关闭，压测时设 HC_PERF_ENABLED=true）
+  perf:
+    enabled: ${HC_PERF_ENABLED:false}
+  # 详情缓存参数：ShopCacheService 标注 @RefreshScope，可在 Nacos 的
+  # shop-service.yaml 中修改后热更新，无需重启（详见 hc.shop.cache.*）
+  shop:
+    cache:
+      base-ttl-seconds: 1800
+      ttl-jitter-seconds: 600
+      null-ttl-seconds: 60
+      null-ttl-jitter-seconds: 30
+      lock-ttl-seconds: 10
+      retry-times: 3
+      retry-sleep-millis: 50

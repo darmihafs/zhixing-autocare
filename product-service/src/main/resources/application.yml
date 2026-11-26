@@ -1,0 +1,68 @@
+# =====================================================================
+# 商品服务 product-service：分类/商品、库存扣减防超卖
+# 端口 8082；库 hc_product；Redis db2；RocketMQ 生产者（库存变更事件）
+# =====================================================================
+server:
+  port: 8082
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+spring:
+  application:
+    name: product-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3307}/hc_product?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USERNAME:root}
+    password: "${MYSQL_PASSWORD:123456}"
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 10
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 2
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  producer:
+    group: ${spring.application.name}-producer-group
+    send-message-timeout: 3000
+
+# 内部调用凭证（/internal/** 校验；调用方如 order-service 须配置同值）
+hc:
+  internal:
+    token: ${INTERNAL_TOKEN:hc-internal-2026-dev-token}
+
+logging:
+  level:
+    com.hongcheng: info

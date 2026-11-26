@@ -1,0 +1,73 @@
+# =====================================================================
+# AI 顾问服务 ai-service：OpenAI 兼容 Tool Calling + ReAct + SSE
+# 端口 8087；Redis db7（会话记忆）；不接 MySQL/RocketMQ/ES
+#
+# 安全规范：真实密钥一律不落盘。base-url / model / api-key 仅通过
+# 环境变量注入，未设置时使用安全默认值（api-key 默认空 => 自动降级
+# 为本地真实检索兜底，接口永远可用）。
+# =====================================================================
+server:
+  port: 8087
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+spring:
+  application:
+    name: ai-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 3000
+            read-timeout: 8000
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 7
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+# Sentinel 的 Feign 适配只认顶层 feign.sentinel.enabled（无 spring.cloud 前缀）
+feign:
+  sentinel:
+    enabled: true
+
+hc:
+  internal:
+    token: ${INTERNAL_TOKEN:hc-internal-2026-dev-token}
+  ai:
+    # 仅环境变量注入，严禁写死真实密钥
+    base-url: ${AI_BASE_URL:https://api.deepseek.com/v1}
+    model: ${AI_MODEL:deepseek-chat}
+    api-key: ${AI_API_KEY:}
+    # ReAct 最大工具调用轮数，防死循环
+    max-tool-rounds: 3
+    # 单次大模型请求超时（毫秒），超时自动降级
+    request-timeout-ms: 20000
+    # 会话记忆：最近 N 轮（user+assistant 为一轮），TTL 秒
+    memory-rounds: 10
+    memory-ttl-seconds: 7200
+  sentinel:
+    ai-chat-qps: 10
+    ai-degrade-rt-ms: 15000
+    ai-degrade-min-requests: 5
+    ai-degrade-window-seconds: 10
+
+logging:
+  level:
+    com.hongcheng: info

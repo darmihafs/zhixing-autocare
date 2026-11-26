@@ -1,0 +1,102 @@
+# =====================================================================
+# 订单服务 order-service：下单削峰、状态机、延迟超时取消
+# 端口 8084；库 hc_order；Redis db4；RocketMQ 生产+消费
+# =====================================================================
+server:
+  port: 8084
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+# Sentinel 的 Feign 适配由 spring-cloud-starter-alibaba-sentinel 提供，
+# 其 @ConditionalOnProperty 只认 feign.sentinel.enabled（无 spring.cloud 前缀），
+# 放在 spring.cloud.openfeign 下不会生效，FallbackFactory 不会被织入。
+feign:
+  sentinel:
+    enabled: true
+
+spring:
+  application:
+    name: order-service
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_DISCOVERY_IP:127.0.0.1}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 2000
+            read-timeout: 5000
+  config:
+    import:
+      - optional:nacos:${spring.application.name}.yaml
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: "jdbc:mysql://${MYSQL_HOST:127.0.0.1}:${MYSQL_PORT:3307}/hc_order?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=${MYSQL_USE_SSL:false}&allowPublicKeyRetrieval=true"
+    username: ${MYSQL_USERNAME:root}
+    password: "${MYSQL_PASSWORD:123456}"
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 10
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 4
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+
+rocketmq:
+  name-server: ${ROCKETMQ_NAMESRV:127.0.0.1:9876}
+  producer:
+    group: ${spring.application.name}-producer-group
+    send-message-timeout: 3000
+
+hc:
+  # 服务间内部凭证（/internal/** 校验；网关不路由该前缀）
+  internal:
+    token: ${INTERNAL_TOKEN:hc-internal-2026-dev-token}
+  # 演示接口开关：本地演示开启，生产设 HC_DEMO_ENABLED=false 一键关闭 /demo-deliver
+  demo:
+    enabled: ${HC_DEMO_ENABLED:true}
+  ws:
+    allowed-origins: "${HC_WS_ALLOWED_ORIGINS:*}"
+  order:
+    # RocketMQ 延迟等级（1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h）
+    # 默认 16=30 分钟（生产值）；本地短时验收可设 4=30s
+    pay-timeout-delay-level: ${ORDER_PAY_TIMEOUT_DELAY_LEVEL:16}
+    # 支付截止时间（秒），必须与上面的延迟等级对齐，供前端收银台倒计时使用
+    pay-timeout-seconds: ${ORDER_PAY_TIMEOUT_SECONDS:1800}
+  # 与 gateway/user-service 同一 JWT 密钥：/ws/order 握手从 ?token= 验签取 userId
+  jwt:
+    secret: ${JWT_SECRET:hongcheng-car-platform-jwt-secret-2026-dev-only}
+  sentinel:
+    # 下单入口 QPS 阈值（可启动参数覆盖做流控触发验证）
+    order-create-qps: 20
+    # 慢调用熔断：平均 RT 超过 1000ms 且 10s 内至少 5 次请求时熔断 10s
+    order-degrade-rt-ms: 1000
+    order-degrade-min-requests: 5
+    order-degrade-window-seconds: 10
+
+logging:
+  level:
+    com.hongcheng: info

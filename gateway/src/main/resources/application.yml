@@ -1,0 +1,129 @@
+# =====================================================================
+# 网关服务 gateway（WebFlux，统一入口）
+# 端口 8080；路由与 JWT 全局过滤器在后续步骤补充
+# =====================================================================
+server:
+  port: 8080
+  address: ${SERVER_ADDRESS:0.0.0.0}
+
+spring:
+  application:
+    name: gateway
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+      config:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        file-extension: yaml
+    gateway:
+      # 不开启按服务名自动路由，显式声明 routes（路径对外统一 /api 前缀）
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        # 认证白名单路径（JwtAuthFilter 放行）
+        - id: user-auth
+          uri: lb://user-service
+          predicates:
+            - Path=/api/auth/**
+          filters:
+            - StripPrefix=1
+        # 用户/关注/点赞（需登录）
+        - id: user-biz
+          uri: lb://user-service
+          predicates:
+            - Path=/api/user/**,/api/follow/**,/api/like/**
+          filters:
+            - StripPrefix=1
+        # 购物车（需登录，JwtAuthFilter 不放行 /api/cart/**）
+        - id: cart
+          uri: lb://product-service
+          predicates:
+            - Path=/api/cart/**
+          filters:
+            - StripPrefix=1
+        # 商品公开浏览（匿名）；/internal/** 不路由，外部不可达
+        - id: product-public
+          uri: lb://product-service
+          predicates:
+            - Path=/api/product/**
+          filters:
+            - StripPrefix=1
+        # 门店/服务公开浏览与搜索（匿名）；/internal/** 不路由，外部不可达
+        - id: shop-public
+          uri: lb://shop-service
+          predicates:
+            - Path=/api/shop/**
+          filters:
+            - StripPrefix=1
+        # 门店/服务管理端（仅限 ADMIN 角色，网关清洗伪造头后下游拦截器校验）
+        - id: shop-manage
+          uri: lb://shop-service
+          predicates:
+            - Path=/api/manage/**
+          filters:
+            - StripPrefix=1
+        # 订单（需登录）：下单削峰、查询、取消、完成
+        - id: order
+          uri: lb://order-service
+          predicates:
+            - Path=/api/order/**
+          filters:
+            - StripPrefix=1
+        # 支付（需登录）：创建支付单、模拟支付、查询支付状态；/internal/** 不路由
+        - id: pay
+          uri: lb://pay-service
+          predicates:
+            - Path=/api/pay/**
+          filters:
+            - StripPrefix=1
+        # 评价：发布/我的/回复需登录；商品/门店评价列表、统计、详情在 JwtAuthFilter 匿名放行
+        - id: review
+          uri: lb://review-service
+          predicates:
+            - Path=/api/review/**
+          filters:
+            - StripPrefix=1
+        # AI 养车顾问：匿名可对话（JwtAuthFilter 可选鉴权），携带登录态时透传 X-User-Id
+        - id: ai
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/ai/**
+          filters:
+            - StripPrefix=1
+        # 支付结果 WebSocket：握手阶段由 pay-service 校验 ?token=，不做 StripPrefix
+        - id: pay-ws
+          uri: lb:ws://pay-service
+          predicates:
+            - Path=/ws/pay
+        # 订单进度 WebSocket：握手阶段由 order-service 校验 ?token=，不做 StripPrefix
+        - id: order-ws
+          uri: lb:ws://order-service
+          predicates:
+            - Path=/ws/order
+  config:
+    import:
+      # optional：Nacos 上暂无该 dataId 时不阻塞启动
+      - optional:nacos:${spring.application.name}.yaml
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6380}
+      password: "${REDIS_PASSWORD:123456}"
+      database: 0
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+
+# JWT：与 user-service 保持同一密钥（支持环境变量与 Nacos 配置中心覆盖）
+hc:
+  jwt:
+    secret: ${JWT_SECRET:hongcheng-car-platform-jwt-secret-2026-dev-only}
+    expire-ms: 7200000
+
+logging:
+  level:
+    com.hongcheng: info
